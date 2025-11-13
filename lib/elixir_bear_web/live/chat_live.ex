@@ -18,7 +18,8 @@ defmodule ElixirBearWeb.ChatLive do
       |> assign(:error, nil)
       |> assign(:selected_background, selected_background)
       |> allow_upload(:message_files,
-        accept: ~w(.jpg .jpeg .png .gif .webp .mp3 .mp4 .mpeg .mpga .m4a .wav
+        accept: ~w(.jpg .jpeg .png .gif .webp
+                   .mp3 .mpga .m4a .wav
                    .txt .md .ex .exs .heex .eex .leex
                    .js .jsx .ts .tsx .css .scss .html .json .xml .yaml .yml .toml
                    .py .rb .java .go .rs .c .cpp .h .hpp .sh .bash),
@@ -225,7 +226,7 @@ defmodule ElixirBearWeb.ChatLive do
         # Process uploaded files
         uploaded_files =
           consume_uploaded_entries(socket, :message_files, fn %{path: path}, entry ->
-            process_uploaded_file(path, entry)
+            {:ok, process_uploaded_file(path, entry)}
           end)
 
         # Read text file contents and append to message
@@ -249,20 +250,31 @@ defmodule ElixirBearWeb.ChatLive do
             content: full_message
           })
 
-        # Save file attachments
-        Enum.each(uploaded_files, fn {file_type, file_path, original_name, mime_type, file_size} ->
-          Chat.create_message_attachment(%{
-            message_id: saved_message.id,
-            file_type: file_type,
-            file_path: file_path,
-            original_name: original_name,
-            mime_type: mime_type,
-            file_size: file_size
-          })
-        end)
+        # Save file attachments and collect them
+        attachments =
+          Enum.map(uploaded_files, fn {file_type, file_path, original_name, mime_type, file_size} ->
+            {:ok, attachment} =
+              Chat.create_message_attachment(%{
+                message_id: saved_message.id,
+                file_type: file_type,
+                file_path: file_path,
+                original_name: original_name,
+                mime_type: mime_type,
+                file_size: file_size
+              })
 
-        # Add user message to display
-        messages = socket.assigns.messages ++ [%{role: "user", content: full_message}]
+            attachment
+          end)
+
+        # Add user message to display with attachments
+        user_message_map = %{
+          id: saved_message.id,
+          role: "user",
+          content: full_message,
+          attachments: attachments
+        }
+
+        messages = socket.assigns.messages ++ [user_message_map]
 
         # Add temporary assistant message
         messages = messages ++ [%{role: "assistant", content: ""}]
@@ -286,7 +298,7 @@ defmodule ElixirBearWeb.ChatLive do
         llm_messages =
           filtered_messages
           |> Enum.map(fn msg ->
-            content = prepare_message_content(msg, llm_provider)
+            content = prepare_message_content(msg)
             %{role: msg.role, content: content}
           end)
 
@@ -297,6 +309,14 @@ defmodule ElixirBearWeb.ChatLive do
             llm_messages
           end
 
+        # Check if any message has images
+        has_images =
+          filtered_messages
+          |> Enum.any?(fn msg ->
+            Map.has_key?(msg, :attachments) &&
+              Enum.any?(msg.attachments, fn att -> att.file_type == "image" end)
+          end)
+
         # Start async task to call LLM with streaming
         parent = self()
 
@@ -306,19 +326,26 @@ defmodule ElixirBearWeb.ChatLive do
           end
 
           result =
-            case llm_provider do
-              "openai" ->
-                api_key = Chat.get_setting_value("openai_api_key")
-                model = Chat.get_setting_value("openai_model") || "gpt-3.5-turbo"
-                OpenAI.stream_chat_completion(api_key, llm_messages, callback, model: model)
+            # If there are images, always use OpenAI Vision API regardless of provider
+            if has_images do
+              api_key = Chat.get_setting_value("openai_api_key")
+              vision_model = Chat.get_setting_value("vision_model") || "gpt-4o"
+              OpenAI.stream_chat_completion(api_key, llm_messages, callback, model: vision_model)
+            else
+              case llm_provider do
+                "openai" ->
+                  api_key = Chat.get_setting_value("openai_api_key")
+                  model = Chat.get_setting_value("openai_model") || "gpt-3.5-turbo"
+                  OpenAI.stream_chat_completion(api_key, llm_messages, callback, model: model)
 
-              "ollama" ->
-                model = Chat.get_setting_value("ollama_model") || "codellama:latest"
-                url = Chat.get_setting_value("ollama_url") || "http://localhost:11434"
-                Ollama.stream_chat_completion(llm_messages, callback, model: model, url: url)
+                "ollama" ->
+                  model = Chat.get_setting_value("ollama_model") || "codellama:latest"
+                  url = Chat.get_setting_value("ollama_url") || "http://localhost:11434"
+                  Ollama.stream_chat_completion(llm_messages, callback, model: model, url: url)
 
-              _ ->
-                {:error, "Unknown LLM provider: #{llm_provider}"}
+                _ ->
+                  {:error, "Unknown LLM provider: #{llm_provider}"}
+              end
             end
 
           case result do
@@ -335,14 +362,14 @@ defmodule ElixirBearWeb.ChatLive do
     end
   end
 
-  defp prepare_message_content(message, llm_provider) do
+  defp prepare_message_content(message) do
     # Check if message has image attachments
     has_images =
       Map.has_key?(message, :attachments) &&
         Enum.any?(message.attachments, fn att -> att.file_type == "image" end)
 
-    # For OpenAI with images, use multimodal content format
-    if llm_provider == "openai" && has_images do
+    # If there are images, use multimodal content format
+    if has_images do
       image_attachments =
         message.attachments
         |> Enum.filter(fn att -> att.file_type == "image" end)
@@ -655,11 +682,19 @@ defmodule ElixirBearWeb.ChatLive do
               </div>
             <% end %>
 
-            <.form for={%{}} phx-submit="send_message" phx-change="validate_upload" class="flex gap-2">
+            <.form
+              for={%{}}
+              phx-submit="send_message"
+              phx-change="validate_upload"
+              phx-drop-target={@uploads.message_files.ref}
+              phx-hook="PasteUpload"
+              id="message-form"
+              class="flex gap-2"
+            >
               <label
-                for="file-upload"
                 class="cursor-pointer px-3 py-2 bg-base-200 hover:bg-base-300 text-base-content rounded-lg transition-colors flex items-center justify-center"
               >
+                <.live_file_input upload={@uploads.message_files} class="hidden" />
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     stroke-linecap="round"
@@ -668,7 +703,6 @@ defmodule ElixirBearWeb.ChatLive do
                     d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
                   />
                 </svg>
-                <.live_file_input upload={@uploads.message_files} class="hidden" id="file-upload" />
               </label>
 
               <input

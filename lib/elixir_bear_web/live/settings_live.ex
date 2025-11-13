@@ -9,6 +9,7 @@ defmodule ElixirBearWeb.SettingsLive do
     system_prompt = Chat.get_setting_value("system_prompt") || ""
     llm_provider = Chat.get_setting_value("llm_provider") || "openai"
     openai_model = Chat.get_setting_value("openai_model") || "gpt-3.5-turbo"
+    vision_model = Chat.get_setting_value("vision_model") || "gpt-4o"
     ollama_model = Chat.get_setting_value("ollama_model") || "codellama:latest"
     ollama_url = Chat.get_setting_value("ollama_url") || "http://localhost:11434"
 
@@ -52,6 +53,7 @@ defmodule ElixirBearWeb.SettingsLive do
       |> assign(:llm_provider, llm_provider)
       |> assign(:openai_model, openai_model)
       |> assign(:openai_models, openai_models)
+      |> assign(:vision_model, vision_model)
       |> assign(:ollama_model, ollama_model)
       |> assign(:ollama_models, ollama_models)
       |> assign(:ollama_url, ollama_url)
@@ -99,6 +101,18 @@ defmodule ElixirBearWeb.SettingsLive do
       socket
       |> assign(:openai_model, openai_model)
       |> put_flash(:info, "Model updated")
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("update_vision_model", %{"value" => vision_model}, socket) do
+    Chat.update_setting("vision_model", vision_model)
+
+    socket =
+      socket
+      |> assign(:vision_model, vision_model)
+      |> put_flash(:info, "Vision model updated")
 
     {:noreply, socket}
   end
@@ -503,6 +517,34 @@ defmodule ElixirBearWeb.SettingsLive do
           <p class="mt-1 text-sm text-base-content/70">
             Optional system prompt for all conversations (can be overridden per conversation)
           </p>
+        </div>
+
+        <!-- Vision Model Settings -->
+        <div class="border border-base-300 rounded-lg p-4 bg-base-100">
+          <h3 class="text-lg font-medium text-base-content mb-4">Vision Model (Image Understanding)</h3>
+          <p class="text-sm text-base-content/70 mb-4">
+            Separate model for analyzing images. Always uses OpenAI API with the API key configured above.
+          </p>
+
+          <div>
+            <label for="vision_model" class="block text-sm font-medium text-base-content mb-2">
+              Vision Model
+            </label>
+            <select
+              id="vision_model"
+              name="value"
+              phx-change="update_vision_model"
+              class="w-full px-4 py-2 bg-base-200 text-base-content border border-base-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+            >
+              <option value="gpt-4o" selected={"gpt-4o" == @vision_model}>gpt-4o (Recommended)</option>
+              <option value="gpt-4o-mini" selected={"gpt-4o-mini" == @vision_model}>gpt-4o-mini (Faster, cheaper)</option>
+              <option value="gpt-4-turbo" selected={"gpt-4-turbo" == @vision_model}>gpt-4-turbo</option>
+              <option value="gpt-4-vision-preview" selected={"gpt-4-vision-preview" == @vision_model}>gpt-4-vision-preview</option>
+            </select>
+            <p class="mt-1 text-sm text-base-content/70">
+              Model used for analyzing images you attach to messages
+            </p>
+          </div>
         </div>
 
         <!-- Background Image Gallery -->

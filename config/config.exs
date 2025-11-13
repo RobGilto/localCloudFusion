@@ -60,6 +60,45 @@ config :logger, :default_formatter,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# Configure MIME types for file uploads
+config :mime, :types, %{
+  # Text and documentation files
+  "text/plain" => ["txt"],
+  # Elixir files
+  "text/x-elixir" => ["ex", "exs"],
+  "text/x-eex" => ["eex", "heex", "leex"],
+  # Web files
+  "application/javascript" => ["js", "jsx"],
+  "text/typescript" => ["ts", "tsx"],
+  "text/css" => ["css", "scss"],
+  "text/html" => ["html"],
+  # Data files
+  "application/json" => ["json"],
+  "application/xml" => ["xml"],
+  "text/yaml" => ["yaml", "yml"],
+  "application/toml" => ["toml"],
+  # Programming languages
+  "text/x-python" => ["py"],
+  "text/x-ruby" => ["rb"],
+  "text/x-java" => ["java"],
+  "text/x-go" => ["go"],
+  "text/x-rust" => ["rs"],
+  "text/x-c" => ["c", "h"],
+  "text/x-c++" => ["cpp", "hpp"],
+  "text/x-sh" => ["sh", "bash"],
+  # Audio files (for future Whisper integration)
+  "audio/mpeg" => ["mp3", "mpga"],
+  "audio/mp4" => ["m4a"],
+  "audio/wav" => ["wav"]
+}
+
+# Specify preferred MIME types for extensions that could have multiple types
+config :mime, :extensions, %{
+  "mp4" => "video/mp4",
+  "ts" => "text/typescript",
+  "sh" => "text/x-sh"
+}
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

@@ -25,11 +25,51 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/elixir_bear"
 import topbar from "../vendor/topbar"
 
+// Custom hooks
+const Hooks = {
+  PasteUpload: {
+    mounted() {
+      this.el.addEventListener("paste", (e) => {
+        const items = e.clipboardData?.items
+        if (!items) return
+
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf("image") !== -1) {
+            e.preventDefault()
+            const blob = items[i].getAsFile()
+            const file = new File([blob], `pasted-image-${Date.now()}.png`, { type: blob.type })
+
+            // Get the file input element from the upload
+            const uploadInput = this.el.querySelector('input[type="file"]')
+            if (uploadInput) {
+              // Create a new FileList-like object
+              const dataTransfer = new DataTransfer()
+              // Add existing files
+              if (uploadInput.files) {
+                for (let f of uploadInput.files) {
+                  dataTransfer.items.add(f)
+                }
+              }
+              // Add the pasted file
+              dataTransfer.items.add(file)
+              // Set the files on the input
+              uploadInput.files = dataTransfer.files
+              // Trigger change event to notify LiveView
+              uploadInput.dispatchEvent(new Event('change', { bubbles: true }))
+            }
+            break
+          }
+        }
+      })
+    }
+  }
+}
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks},
+  hooks: {...colocatedHooks, ...Hooks},
 })
 
 // Show progress bar on live navigation and form submits
