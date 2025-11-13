@@ -32,7 +32,7 @@ defmodule ElixirBearWeb.ChatLive do
   @impl true
   def handle_params(%{"id" => id}, _uri, socket) do
     conversation = Chat.get_conversation!(id)
-    messages = Chat.list_messages(id)
+    messages = Chat.list_messages_with_attachments(id)
 
     socket =
       socket
@@ -506,6 +506,50 @@ defmodule ElixirBearWeb.ChatLive do
                   <div class="text-sm font-medium mb-1">
                     {if message.role == "user", do: "You", else: "ElixirBear"}
                   </div>
+
+                  <!-- Show attachments if present -->
+                  <%= if Map.has_key?(message, :attachments) && length(message.attachments) > 0 do %>
+                    <div class="mb-2 flex flex-wrap gap-2">
+                      <%= for attachment <- message.attachments do %>
+                        <%= cond do %>
+                          <% attachment.file_type == "image" -> %>
+                            <div class="relative group">
+                              <img
+                                src={"#{attachment.file_path}?v=#{attachment.id}"}
+                                alt={attachment.original_name}
+                                class="max-w-xs max-h-64 rounded-lg border border-base-300"
+                                loading="lazy"
+                              />
+                              <div class="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity rounded-b-lg">
+                                {attachment.original_name}
+                              </div>
+                            </div>
+                          <% attachment.file_type == "audio" -> %>
+                            <div class="w-full max-w-md">
+                              <div class="text-xs mb-1 opacity-70">{attachment.original_name}</div>
+                              <audio controls class="w-full">
+                                <source src={attachment.file_path} type={attachment.mime_type} />
+                                Your browser does not support the audio element.
+                              </audio>
+                            </div>
+                          <% attachment.file_type == "text" -> %>
+                            <div class="flex items-center gap-2 bg-base-300 px-3 py-2 rounded-lg text-sm">
+                              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              <a
+                                href={attachment.file_path}
+                                target="_blank"
+                                class="hover:underline"
+                              >
+                                {attachment.original_name}
+                              </a>
+                            </div>
+                        <% end %>
+                      <% end %>
+                    </div>
+                  <% end %>
+
                   <div class="whitespace-pre-wrap">{message.content}</div>
                 </div>
               </div>
