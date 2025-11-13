@@ -6,7 +6,7 @@ defmodule ElixirBear.Chat do
   import Ecto.Query, warn: false
   alias ElixirBear.Repo
 
-  alias ElixirBear.Chat.{Setting, Conversation, Message}
+  alias ElixirBear.Chat.{Setting, Conversation, Message, MessageAttachment}
   alias ElixirBear.BackgroundImage
 
   # Settings
@@ -203,5 +203,43 @@ defmodule ElixirBear.Chat do
   """
   def delete_background_image(%BackgroundImage{} = background_image) do
     Repo.delete(background_image)
+  end
+
+  # Message Attachments
+
+  @doc """
+  Creates a message attachment.
+  """
+  def create_message_attachment(attrs \\ %{}) do
+    %MessageAttachment{}
+    |> MessageAttachment.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
+  Gets attachments for a message.
+  """
+  def list_message_attachments(message_id) do
+    MessageAttachment
+    |> where([a], a.message_id == ^message_id)
+    |> Repo.all()
+  end
+
+  @doc """
+  Gets messages with their attachments for a conversation.
+  """
+  def list_messages_with_attachments(conversation_id) do
+    Message
+    |> where([m], m.conversation_id == ^conversation_id)
+    |> order_by([m], asc: m.inserted_at)
+    |> Repo.all()
+    |> Repo.preload(:attachments)
+  end
+
+  @doc """
+  Deletes a message attachment.
+  """
+  def delete_message_attachment(%MessageAttachment{} = attachment) do
+    Repo.delete(attachment)
   end
 end

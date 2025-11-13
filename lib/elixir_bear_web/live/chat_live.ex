@@ -17,6 +17,11 @@ defmodule ElixirBearWeb.ChatLive do
       |> assign(:loading, false)
       |> assign(:error, nil)
       |> assign(:selected_background, selected_background)
+      |> allow_upload(:message_files,
+        accept: ~w(.jpg .jpeg .png .gif .webp .mp3 .mp4 .mpeg .mpga .m4a .wav),
+        max_entries: 5,
+        max_file_size: 20_000_000  # 20MB
+      )
 
     {:ok, socket}
   end
@@ -94,6 +99,16 @@ defmodule ElixirBearWeb.ChatLive do
   @impl true
   def handle_event("update_input", %{"message" => message}, socket) do
     {:noreply, assign(socket, :input, message)}
+  end
+
+  @impl true
+  def handle_event("validate_upload", _params, socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("cancel_upload", %{"ref" => ref}, socket) do
+    {:noreply, cancel_upload(socket, :message_files, ref)}
   end
 
   @impl true
@@ -432,7 +447,54 @@ defmodule ElixirBearWeb.ChatLive do
           </div>
           <!-- Input Area -->
           <div class="border-t border-base-300 bg-base-100 p-4">
-            <.form for={%{}} phx-submit="send_message" class="flex gap-4">
+            <!-- File Upload Previews -->
+            <%= if length(@uploads.message_files.entries) > 0 do %>
+              <div class="mb-3 flex flex-wrap gap-2">
+                <%= for entry <- @uploads.message_files.entries do %>
+                  <div class="relative group">
+                    <div class="flex items-center gap-2 bg-base-200 px-3 py-2 rounded-lg border border-base-300">
+                      <%= if String.starts_with?(entry.client_type, "image/") do %>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      <% else %>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                        </svg>
+                      <% end %>
+                      <span class="text-sm truncate max-w-[150px]"><%= entry.client_name %></span>
+                      <button
+                        type="button"
+                        phx-click="cancel_upload"
+                        phx-value-ref={entry.ref}
+                        class="text-error hover:text-error/80"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                <% end %>
+              </div>
+            <% end %>
+
+            <.form for={%{}} phx-submit="send_message" phx-change="validate_upload" class="flex gap-2">
+              <label
+                for="file-upload"
+                class="cursor-pointer px-3 py-2 bg-base-200 hover:bg-base-300 text-base-content rounded-lg transition-colors flex items-center justify-center"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                  />
+                </svg>
+                <.live_file_input upload={@uploads.message_files} class="hidden" id="file-upload" />
+              </label>
+
               <input
                 type="text"
                 name="message"
@@ -444,7 +506,7 @@ defmodule ElixirBearWeb.ChatLive do
               />
               <button
                 type="submit"
-                disabled={@loading || @input == ""}
+                disabled={@loading || (@input == "" && length(@uploads.message_files.entries) == 0)}
                 class="px-6 py-2 bg-primary text-primary-content rounded-lg hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Send

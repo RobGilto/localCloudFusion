@@ -7,6 +7,7 @@ defmodule ElixirBear.Chat.Message do
     field :content, :string
 
     belongs_to :conversation, ElixirBear.Chat.Conversation
+    has_many :attachments, ElixirBear.Chat.MessageAttachment
 
     timestamps(type: :utc_datetime)
   end
